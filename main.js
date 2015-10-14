@@ -60,7 +60,8 @@ var mockFileLibrary =
 {
 	pathExists:
 	{
-		'path/fileExists': {}
+		'path/fileExists': {file2: 'more text content'},
+		'path/empty':{}
 	},
 	fileWithContent:
 	{
@@ -108,6 +109,8 @@ function generateTestCases()
 					params[constraint.ident] = [constraint.value, constraint.value + 1, constraint.value -1 ];
 				} else if(constraint.kind == "string") {
 					params[constraint.ident] = [constraint.value, "\'" + Random.string()(engine, 15) + "\'"];
+				} else if(constraint.kind == "fileExists") {
+					params[constraint.ident] = [constraint.value, "'path/empty'"];
 				} else {
 					params[constraint.ident] = [constraint.value];
 				}
@@ -168,7 +171,6 @@ function cartesian() {
 
 function generateMockFsTestCases (pathExists,fileWithContent,funcName,args) 
 {
-	console.log("pE: " + pathExists + " fwC: " + fileWithContent + " funcName: " + funcName + " args: " + args);
 	var testCase = "";
 	// Build mock file system based on constraints.
 	var mergedFS = {};
@@ -202,7 +204,6 @@ function constraints(filePath)
 		if (node.type === 'FunctionDeclaration') 
 		{
 			var funcName = functionName(node);
-			console.log("Line : {0} Function: {1}".format(node.loc.start.line, funcName ));
 
 			var params = node.params.map(function(p) {return p.name});
 
@@ -211,7 +212,6 @@ function constraints(filePath)
 			// Check for expressions using argument.
 			traverse(node, function(child)
 			{
-				//console.log("\nCHILD: " + JSON.stringify(child));
 				if( child.type === 'BinaryExpression' 
 					&& (child.operator == "=="
 					|| child.operator == "===" 
@@ -296,9 +296,6 @@ function constraints(filePath)
 				}
 
 			});
-
-			console.log( functionConstraints[funcName]);
-
 		}
 	});
 }
