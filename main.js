@@ -83,14 +83,17 @@ function generateTestCases()
 		for (var i =0; i < functionConstraints[funcName].params.length; i++ )
 		{
 			var paramName = functionConstraints[funcName].params[i];
-			//params[paramName] = '\'' + faker.phone.phoneNumber()+'\'';
-			params[paramName] = '\'\'';
+			if(paramName == "phoneNumber") {
+				params[paramName] = '\'' + faker.phone.phoneNumber()+'\'';
+			}
+			else {
+				params[paramName] = '\'\'';
+			}
 		}
-
-		//console.log( params );
 
 		// update parameter values based on known constraints.
 		var constraints = functionConstraints[funcName].constraints;
+
 		// Handle global constraints...
 		var fileWithContent = _.some(constraints, {kind: 'fileWithContent' });
 		var pathExists      = _.some(constraints, {kind: 'fileExists' });
@@ -101,21 +104,35 @@ function generateTestCases()
 			var constraint = constraints[c];
 			if( params.hasOwnProperty( constraint.ident ) )
 			{
-				params[constraint.ident] = constraint.value;
+				if(constraint.kind == "integer") {
+					params[constraint.ident] = [constraint.value, constraint.value + 1, constraint.value -1 ];
+				} else if(constraint.kind == "string") {
+					params[constraint.ident] = [constraint.value, "\'" + Random.string()(engine, 15) + "\'"];
+				} else {
+					params[constraint.ident] = [constraint.value];
+				}
 			}
 		}
 
-		// Prepare function arguments.
-		var args = Object.keys(params).map( function(k) {return params[k]; }).join(",");
+		var values = Object.keys(params).map(function(k){return params[k];});
+		var argsArray = cartesian.apply(this, values);
+
 		if( pathExists || fileWithContent )
 		{
-			content += generateMockFsTestCases(pathExists,fileWithContent,funcName, args);
-			// Bonus...generate constraint variations test cases....
+			for(var i = 0; i < argsArray.length; i++) {
+				var args = argsArray[i];
+				content += generateMockFsTestCases(pathExists,fileWithContent,funcName, args);
+				content += generateMockFsTestCases(!pathExists,fileWithContent,funcName, args);
+				content += generateMockFsTestCases(pathExists,!fileWithContent,funcName, args);
+				content += generateMockFsTestCases(!pathExists,!fileWithContent,funcName, args);
+			}
 		}
 		else
-		{
-			// Emit simple test case.
-			content += "subject.{0}({1});\n".format(funcName, args );
+		{	
+			for(var i = 0; i < argsArray.length; i++) {
+				var args = argsArray[i];
+				content += "subject.{0}({1});\n".format(funcName, args );
+			}
 		}
 
 	}
@@ -125,8 +142,33 @@ function generateTestCases()
 
 }
 
+//This function was taken from 
+//https://stackoverflow.com/questions/15298912/javascript-generating-combinations-from-n-arrays-with-m-elements
+//It generates all combinations of elements in the arrays passed to it. Modified slightly to handle being passed an 
+//array of strings 
+function cartesian() {
+    var r = [], arg = arguments, max = arg.length-1;
+    function helper(arr, i) {
+        for (var j=0, l=arg[i].length; j<l; j++) {
+            var a = arr.slice(0); // clone arr
+            if (arg[i].constructor === String ) {
+				a.push(arg[i]);
+			} else {
+				a.push(arg[i][j]);
+			}
+            if (i==max)
+                r.push(a);
+            else
+                helper(a, i+1);
+        }
+    }
+    helper([], 0);
+    return r;
+}
+
 function generateMockFsTestCases (pathExists,fileWithContent,funcName,args) 
 {
+	console.log("pE: " + pathExists + " fwC: " + fileWithContent + " funcName: " + funcName + " args: " + args);
 	var testCase = "";
 	// Build mock file system based on constraints.
 	var mergedFS = {};
@@ -169,13 +211,28 @@ function constraints(filePath)
 			// Check for expressions using argument.
 			traverse(node, function(child)
 			{
-				if( child.type === 'BinaryExpression' && child.operator == "==")
+				//console.log("\nCHILD: " + JSON.stringify(child));
+				if( child.type === 'BinaryExpression' 
+					&& (child.operator == "=="
+					|| child.operator == "===" 
+					|| child.operator == "<"
+					|| child.operator == ">"
+					|| child.operator == "<="
+					|| child.operator == ">="
+					|| child.operator == "!="
+					|| child.operator == "!=="))
 				{
 					if( child.left.type == 'Identifier' && params.indexOf( child.left.name ) > -1)
 					{
 						// get expression from original source code:
 						var expression = buf.substring(child.range[0], child.range[1]);
-						var rightHand = buf.substring(child.right.range[0], child.right.range[1])
+						var rightHand = buf.substring(child.right.range[0], child.right.range[1]);
+						var kind = "string";
+
+						if(!isNaN(parseInt(rightHand))) {
+							rightHand = parseInt(rightHand);
+							kind = "integer";
+						}
 
 						functionConstraints[funcName].constraints.push( 
 							new Constraint(
@@ -183,10 +240,13 @@ function constraints(filePath)
 								ident: child.left.name,
 								value: rightHand,
 								funcName: funcName,
-								kind: "integer",
+								kind: kind,
 								operator : child.operator,
 								expression: expression
 							}));
+					}
+					else if (child.left.type == 'Identifier' && params.indexOf( child.left.name ) === -1) {
+						console.log("Branch based on non param. " + child.left.name);//TODO area in blackListNumber
 					}
 				}
 
