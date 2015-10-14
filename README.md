@@ -1,5 +1,5 @@
 link to coverage report screenshot
-https://imgur.com/2WLIjUW
+![screenshot](http://i.imgur.com/2WLIjUW.png)
 
 
 # Original README.md
